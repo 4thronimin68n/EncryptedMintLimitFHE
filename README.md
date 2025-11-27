@@ -1,352 +1,396 @@
-# Encrypted Player Registry · Zama FHEVM
+# Mint Capacity Gate · Zama FHEVM
 
-A minimal demo dApp that showcases how to build a privacy‑preserving player registry on top of the **Zama FHEVM**.
+> Encrypted per-wallet mint limits for NFT collections. Track capacity without revealing how much each wallet has minted.
 
-Each player registers with:
+This project demonstrates how to implement **private mint limits** for an NFT collection using **Zama's fhEVM**. Instead of tracking mint counts in clear, the contract stores an **encrypted per-wallet counter** and a **global encrypted mint cap**.
 
-* a **public name** stored in plaintext (for leaderboards / UX), and
-* a **fully homomorphic encrypted age** stored as an `euint8` in the smart contract.
+For each wallet and mint attempt, the contract computes a single encrypted boolean:
 
-The age is never revealed on-chain in clear form. The player can decrypt their own age off‑chain using the **Relayer SDK 0.2.0** and an EIP‑712 signature.
+* `1` → wallet still appears to be **within the private limit**
+* `0` → wallet **seems to have reached or exceeded** the limit
+
+Only this one-bit flag is made publicly decryptable. The exact limit and the exact minted count always remain encrypted.
+
+Built for the **Zama Developer Program**, this project shows how fhEVM can act as a **privacy-preserving rate limiter** for NFT drops or other quota-based systems.
 
 ---
 
-## Tech stack
+## 1. Concept & Motivation
 
-* **Smart contract**: Solidity `^0.8.24`
+Typical NFT collections implement mint limits like:
 
-  * `@fhevm/solidity` (Zama FHE library)
-  * `SepoliaConfig` from Zama FHEVM config
-* **Frontend**: single‑page HTML app
+> *"Each wallet may mint at most 5 tokens."*
 
-  * `@zama-fhe/relayer-sdk` **0.2.0** (browser build)
-  * `ethers` **v6** (ESM, `BrowserProvider`, `Contract`)
-* **Network**: Sepolia FHEVM (testnet)
-* **Tooling**: Hardhat + hardhat‑deploy (backend), static web server (frontend)
+On a public chain, this is usually managed by storing a clear `uint256` counter per wallet. Anyone can see:
 
-Frontend entry point lives at:
+* how many tokens each address has minted
+* the global limit configuration
+
+With fhEVM, we can keep both the **limit** and the **counters** encrypted while still enforcing the rule on-chain.
+
+**Goal:**
+
+* enforce a **per-wallet cap** on mint activity;
+* keep the **total minted per wallet** private;
+* reveal only a one-bit answer: *"still allowed"* / *"limit reached"*.
+
+This project acts as a standalone **Mint Capacity Gate** that an NFT contract or frontend can consult before allowing a mint.
+
+---
+
+## 2. Model: How the private limit is enforced
+
+At a high level:
+
+* The **admin** chooses a clear value `maxMintsPerWallet` (e.g. `5`).
+* The frontend encrypts this number as `uint16` using the **Relayer SDK** and stores the ciphertext on-chain via `setMintPolicy`.
+* For each wallet, the contract maintains an **encrypted counter** `eMinted`.
+* When a wallet wants to mint more tokens, it submits an **encrypted delta** `eDelta` representing "how many I plan to mint now".
+
+The contract then performs:
 
 ```text
-frontend/public/index.html
+minted_new = minted_old + delta
+canStillMint = (minted_new <= maxMintsPerWallet)
 ```
 
----
-
-## Main idea
-
-The dApp demonstrates a simple pattern for Zama FHEVM:
-
-1. The user encrypts sensitive data (age) **in the browser** using the Relayer SDK.
-2. The encrypted value is sent to the smart contract as an `externalEuint8` handle + `proof`.
-3. The contract converts this into an `euint8` and stores it in state.
-4. The user can later:
-
-   * Inspect the **encrypted age handle** on-chain, and
-   * Use **userDecrypt** with an EIP‑712 signature to recover their age off‑chain.
-
-This pattern is reusable for any “profile with private fields” system.
-
----
-
-## Smart contract overview
-
-Contract name: `EncryptedPlayerRegistry`
-
-Key properties:
-
-* Uses only official Zama FHE Solidity library:
-
-  * `import { FHE, euint8, externalEuint8 } from "@fhevm/solidity/lib/FHE.sol";`
-* Extends `SepoliaConfig` for the FHEVM network configuration.
-* Encrypted fields are always stored as `euint8` and **never decrypted on-chain**.
-* Access control over ciphertexts is handled via:
-
-  * `FHE.allowThis(ciphertext)`
-  * `FHE.allow(ciphertext, user)`
-  * `FHE.makePubliclyDecryptable(ciphertext)` for opt‑in public auditability.
-
-### Storage
+In Solidity terms (ignoring encryption wrappers):
 
 ```solidity
-struct Player {
-    bool exists;   // registration flag
-    string name;   // public display name
-    euint8 age;    // encrypted age
-}
+uint16 minted = state[user].minted;
+uint16 max    = maxMintsPerWallet;
+uint16 delta  = request.delta;
 
-mapping(address => Player) private _players;
-address public owner;
+minted += delta;
+bool canStillMint = (minted <= max);
 ```
 
-* `name` is stored in the clear.
-* `age` is an encrypted `euint8`.
+On fhEVM this is implemented with encrypted types:
 
-### Public / player functions
+* `euint16` for counters, deltas, and the global limit;
+* `ebool` for `canStillMint`;
+* homomorphic arithmetic and comparisons:
 
-* `registerEncrypted(string name, externalEuint8 ageExt, bytes proof)`
+  * `FHE.add` for addition;
+  * `FHE.le` for comparison `<=`.
 
-  * Encrypt age in the browser using the Relayer SDK.
-  * Call this function with the encrypted handle and proof.
-  * Contract:
+Only `eCanStillMint` is made **publicly decryptable**. The encrypted `eMinted` and `eMaxMintsPerWallet` remain private.
 
-    * calls `FHE.fromExternal(ageExt, proof)` → `euint8` ciphertext;
-    * stores it in `_players[msg.sender].age`;
-    * uses `FHE.allowThis` and `FHE.allow(ciphertext, msg.sender)`.
+### 2.1 Behaviour recap
 
-* `registerPlain(string name, uint8 agePlain)`
+* A wallet that has never interacted before starts with `minted = 0`.
+* On the first call with `delta = 3` and limit `5`:
 
-  * Dev/demo helper.
-  * Converts plaintext `agePlain` into ciphertext using `FHE.asEuint8` on-chain.
+  * new total = `3` → `canStillMint = true`.
+* Second call with `delta = 2`:
 
-* `updateName(string newName)`
+  * new total = `5` → `canStillMint = true`.
+* Third call with `delta = 1`:
 
-  * Updates only the public `name` field.
+  * new total = `6` → `canStillMint = false` (and will stay `false` for further increments).
 
-* `updateAgeEncrypted(externalEuint8 newAgeExt, bytes proof)`
-
-  * Updates only the encrypted age.
-
-* `isRegistered(address player) -> bool`
-
-  * Returns whether a player has a profile.
-
-* `getPlayer(address player) -> (bool exists, string name, bytes32 ageHandle)`
-
-  * Returns profile metadata and the encrypted age handle (`bytes32`).
-  * `ageHandle` can be fed to public decryption or user decryption off-chain.
-
-* `getMyAgeHandle() -> bytes32`
-
-  * Convenience method to fetch the `bytes32` handle for `msg.sender`’s age.
-
-* `makeMyAgePublic()`
-
-  * Calls `FHE.makePubliclyDecryptable(_players[msg.sender].age)`.
-  * Allows anyone to call `publicDecrypt` on the ciphertext.
-
-### Owner/admin functions
-
-* `owner` / `transferOwnership(address newOwner)`
-
-  * Standard ownership pattern.
-
-* `makePlayerAgePublic(address player)`
-
-  * For audits / demos, owner can force a player’s age to be publicly decryptable.
-
-* `clearPlayer(address player)`
-
-  * Logically clears a player profile.
-  * Sets `exists = false`, wipes `name`, and replaces age with `FHE.asEuint8(0)`.
-  * Avoids using `delete` on `euint8` (not supported).
+The contract never reveals the clear numbers – only whether the private inequality still holds.
 
 ---
 
-## Frontend overview
+## 3. FHE Data Flow
 
-The frontend is a single `index.html` with:
-
-* A **three‑column layout**:
-
-  * Player onboarding (name + encrypted age).
-  * “My profile” section (view profile, update name/age, decrypt age).
-  * Owner console (mark ages public / clear profiles).
-* A **dark neon UI** designed to be visually distinct from other demos.
-* Uses **Relayer SDK 0.2.0** and **ethers v6** via ESM CDNs.
-
-Key flows:
-
-### 1. Connect wallet & Relayer
-
-* Uses `BrowserProvider(window.ethereum)` from ethers v6.
-* Automatically switches to Sepolia (chain id `0xaa36a7`).
-* Initializes the Relayer with:
-
-```ts
-await initSDK();
-relayer = await createInstance({
-  ...SepoliaConfig,
-  relayerUrl: "https://relayer.testnet.zama.cloud",
-  network: window.ethereum,
-  debug: true,
-});
-```
-
-### 2. Encrypted registration
-
-* User enters `name` + `age`.
-* Frontend calls:
-
-```ts
-const input = relayer.createEncryptedInput(CONTRACT_ADDRESS, user);
-input.add8(age);                      // age is uint8
-const { handles, inputProof } = await input.encrypt();
-
-await contract.registerEncrypted(name, handles[0], inputProof);
-```
-
-### 3. Decrypting age (userDecrypt)
-
-* Frontend calls `getMyAgeHandle()`.
-* Generates an ephemeral keypair with `generateKeypair()`.
-* Builds EIP‑712 data via `relayer.createEIP712(...)`.
-* Uses `signer.signTypedData(...)` (EIP‑712) and then:
-
-```ts
-const pairs = [{ handle, contractAddress: CONTRACT_ADDRESS }];
-const result = await relayer.userDecrypt(
-  pairs,
-  kp.privateKey,
-  kp.publicKey,
-  sig.replace("0x", ""),
-  [CONTRACT_ADDRESS],
-  user,
-  startTs,
-  daysValid,
-);
-```
-
-* Displays the decrypted age **only in the UI**, never sending it back on-chain.
-
----
-
-## Project layout
-
-A minimal layout (simplified):
+High-level architecture:
 
 ```text
-.
+User Browser             Relayer SDK               MintLimit Contract
+─────────────           ────────────              ───────────────────
+[Owner] enters cap  ─▶  createEncryptedInput ─▶  setMintPolicy
+                      add16(maxMints)             FHE.fromExternal
+
+[User] enters delta ─▶  createEncryptedInput ─▶  updateMintCounter
+                      add16(delta)                FHE.add / FHE.le
+                                                  │
+                                                  ▼
+                                           eCanStillMint (ebool)
+
+[Anyone] reads flag  ◀─ relayer.publicDecrypt ◀─ handle from getMyMintHandles
+```
+
+### 3.1 Owner flow (encrypted policy)
+
+1. Owner connects with their wallet.
+2. Frontend collects a clear `maxMintsPerWallet` (e.g. `5`).
+3. `createEncryptedInput(contract, owner)` is called and `add16(maxMints)` encodes the value.
+4. The resulting handle + proof are sent to `setMintPolicy`.
+5. The contract uses `FHE.fromExternal` to ingest the ciphertext into `eMaxMintsPerWallet` and calls `FHE.allowThis` so it can use it later.
+
+### 3.2 User flow (encrypted counter)
+
+1. User types a clear `delta` (e.g. `1` or `3`).
+2. Frontend encrypts this via `add16(delta)` and `encrypt()`.
+3. Contract receives `encDelta` + proof in `updateMintCounter`.
+4. It imports the ciphertext as `eDelta`, adds it to `eMinted` with `FHE.add`, and compares the new total with `FHE.le(eMinted, eMaxMintsPerWallet)`.
+5. The resulting `eCanStillMint` is marked publicly decryptable via `FHE.makePubliclyDecryptable`.
+
+### 3.3 Reading the decision
+
+* Anyone can call the view function `getMyMintHandles()` or `getCanMintHandleOf(address)` to obtain the eligibility handle.
+* The frontend passes that handle to `relayer.publicDecrypt(handle)`.
+* The decrypted value is interpreted as `true` (non-zero) or `false` (zero) and displayed in the UI.
+
+The encrypted counter `eMinted` is never publicly decrypted, but the contract grants the user permission with `FHE.allow(eMinted, user)` so that they *could* use a signed `userDecrypt` flow if they want to introspect their own total.
+
+---
+
+## 4. User Interface & UX
+
+The frontend is a single-page HTML app with a **two-column layout** plus a shared log.
+
+1. **Left column – “Your minting capacity”**
+2. **Right column – “Admin lane · encrypted limit”**
+3. **Bottom strip – “Event console”**
+
+All user-facing text is in English.
+
+### 4.1 Left: "Your minting capacity"
+
+This panel is what regular wallets interact with.
+
+**Step 1 – Plan your mint**
+
+* Input: `How many tokens are you about to mint?` (plain number).
+* The user clicks **“Run encrypted check”**.
+* The frontend:
+
+  * encrypts the delta with the Relayer (as `uint16`),
+  * calls `updateMintCounter` on the contract,
+  * shows a temporary status like `"Encrypted check stored on-chain ✔"`.
+
+A secondary button **“Sync decision”** re-reads the on-chain state and re-runs `publicDecrypt`.
+
+**Step 2 – Result**
+
+A rounded status pill reflects the decision:
+
+* **Green dot + text:** `"You are still under the private cap"`
+* **Red dot + text:** `"Limit appears to be reached"`
+* **Yellow / grey:** `"No activity yet"` / `"No decision yet"`
+
+The panel explains that only a one-bit answer is revealed; the cumulative count stays encrypted.
+
+### 4.2 Right: "Admin lane · encrypted limit"
+
+This panel is primarily for the contract owner.
+
+Elements:
+
+* Numeric input: `Max mints per wallet (uint16)`.
+* Button: **“Publish encrypted cap”**
+
+  * Encrypts the value via `add16(maxMints)`.
+  * Calls `setMintPolicy` with the encrypted handle + proof.
+  * On success, the UI displays `"Encrypted cap active ✔"`.
+* A small tag in the header shows policy status:
+
+  * `limit: active` (green) if `policyInitialized == true`.
+  * `limit: not set` (red) otherwise.
+
+Below that, a “Technical snapshot” shows:
+
+* `Owner` address (shortened)
+* `You` (current signer)
+* `Relayer` status ("ready (Sepolia)" / "not ready")
+
+### 4.3 Event console
+
+At the bottom, a dark console-style panel logs:
+
+* encrypted handles
+* transaction hashes
+* raw `publicDecrypt` results
+* error messages from both the wallet and the Relayer
+
+This is useful for debugging and for learning how fhEVM flows behave under the hood.
+
+---
+
+## 5. Smart Contract Overview
+
+The main contract is `EncryptedMintLimitFHE.sol`.
+
+### 5.1 Storage
+
+* `eMaxMintsPerWallet` (`euint16`)
+
+  * encrypted global per-wallet mint limit.
+* `policyInitialized` (`bool`)
+
+  * ensures users cannot update counters before a cap is set.
+* `mints[address]` → `MintState`
+
+  * `eMinted` (`euint16`) – encrypted mint counter for this wallet.
+  * `eCanStillMint` (`ebool`) – encrypted eligibility flag.
+  * `initialized` (`bool`) – has this wallet interacted at least once?
+
+### 5.2 Key functions
+
+* `setMintPolicy(externalEuint16 _maxMintsPerWallet, bytes proof)`
+
+  * Owner-only.
+  * Imports encrypted limit with `FHE.fromExternal`.
+  * Calls `FHE.allowThis` to grant contract access.
+  * Sets `policyInitialized = true`.
+
+* `updateMintCounter(externalEuint16 encDelta, bytes proof)`
+
+  * Open to any address (once policy is initialized).
+  * Ingests `encDelta` into an `euint16` with `FHE.fromExternal`.
+  * Grants access to contract + user (`FHE.allowThis`, `FHE.allow`).
+  * If `!initialized`, sets `eMinted = eDelta`; else `eMinted = FHE.add(eMinted, eDelta)`.
+  * Computes `eCanStillMint = FHE.le(eMinted, eMaxMintsPerWallet)`.
+  * Calls `FHE.makePubliclyDecryptable(eCanStillMint)` so anyone can decrypt the flag.
+
+* View helpers (no FHE ops, handles only):
+
+  * `getMyMintHandles()` → `(mintedHandle, canStillMintHandle, initialized)` for `msg.sender`.
+  * `getCanMintHandleOf(address)` → `(canStillMintHandle, initialized)` for arbitrary address.
+  * `getMintedHandleOf(address)` → `(mintedHandle, initialized)` for arbitrary address.
+
+### 5.3 Access control & privacy
+
+* Standard `owner` pattern with `onlyOwner` modifier.
+* Ciphertext permissions:
+
+  * `FHE.allowThis` → contract can reuse ciphertexts.
+  * `FHE.allow(eMinted, user)` → user can privately decrypt their own counter.
+* Public decryption boundary:
+
+  * Only `eCanStillMint` receives `FHE.makePubliclyDecryptable`.
+  * Neither the global limit nor individual counters are exposed in clear.
+
+---
+
+## 6. Frontend & Relayer Integration
+
+The frontend is a **single-file** `index.html` using:
+
+* **Ethers v6 (ESM)** for wallet and contract calls.
+* **@zama-fhe/relayer-sdk** for:
+
+  * `createEncryptedInput` / `encrypt()`;
+  * `publicDecrypt` to decode public flags.
+* Plain HTML & CSS, no build system required.
+
+### 6.1 Network & endpoints
+
+* **Network:** Sepolia (`chainId = 11155111`, hex `0xaa36a7`).
+
+* **Mint Gate contract:** deployed at
+
+  ```text
+  0x7D3a3ed2903d9e856f1Cd66Fd035C97ee41b3cC9
+  ```
+
+* **Relayer endpoints:**
+
+  * `https://relayer.testnet.zama.org`
+  * `https://gateway.testnet.zama.org`
+  * Optionally, a local HTTPS proxy on `https://localhost:3443` can be used to avoid CORS restrictions in development.
+
+---
+
+## 7. Running Locally
+
+### 7.1 Prerequisites
+
+* Node.js (LTS recommended)
+* MetaMask or another EIP‑1193‑compatible wallet
+* Some Sepolia test ETH for the owner and user accounts
+
+### 7.2 Steps
+
+1. **Clone the repo**
+
+   ```bash
+   git clone https://github.com/your-handle/mint-capacity-gate.git
+   cd mint-capacity-gate
+   ```
+
+2. **Serve the frontend**
+
+   Because the Relayer SDK uses WebAssembly and workers, it should be served from an HTTP(S) server, not via `file://`.
+
+   Minimal example using `serve`:
+
+   ```bash
+   npm install -g serve
+   serve frontend -l 3033
+   ```
+
+   This assumes the `index.html` file lives in a `frontend/` folder.
+
+3. **Open the dApp**
+
+   Visit `http://localhost:3033` (or `https://…` if configured) in a browser with MetaMask.
+
+4. **Connect and switch to Sepolia**
+
+   Click **Connect wallet**. The app will prompt you to switch networks if needed.
+
+5. **Test the flows**
+
+   * As owner:
+
+     * Set a cap (e.g. `5`) in the right column.
+     * Click **Publish encrypted cap**.
+   * As user:
+
+     * Enter delta (e.g. `3`) and click **Run encrypted check**.
+     * Click **Sync decision** to decrypt and display the latest eligibility flag.
+
+> ⚠️ This is an educational demo. Do **not** use it with real funds or production NFT collections.
+
+---
+
+## 8. Project Structure
+
+A minimal repository layout:
+
+```text
+mint-capacity-gate/
 ├── contracts/
-│   └── EncryptedPlayerRegistry.sol
+│   └── EncryptedMintLimitFHE.sol   # fhEVM smart contract implementing the private cap
 ├── frontend/
-│   └── public/
-│       └── index.html   # the SPA described above
-├── deploy/
-│   └── universal-deploy.ts
-├── hardhat.config.ts
-├── package.json
-└── README.md
+│   └── index.html                  # Single-page UI + ethers + Relayer SDK
+├── README.md
+└── package.json                    # Optional dev dependencies & scripts
 ```
+
+You can extend this with a full Hardhat/Foundry setup, NFT contracts, or a React frontend, but the core idea remains the same: **separate the NFT logic from a reusable privacy-preserving mint limiter.**
 
 ---
 
-## Installation & setup
+## 9. Future Extensions
 
-### 1. Clone & install dependencies
+Possible directions to evolve this prototype:
 
-```bash
-git clone &lt;this-repo-url&gt;
-cd &lt;this-repo-folder&gt;
-
-# Install backend deps (Hardhat, hardhat-deploy, etc.)
-npm install
-```
-
-If the frontend uses its own `package.json` inside `frontend/`, also run:
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 2. Environment variables (Hardhat)
-
-In the project root, create a `.env` file (or update an existing one):
-
-```bash
-SEPOLIA_RPC_URL=https://&lt;your-sepolia-rpc&gt;
-PRIVATE_KEY=0x&lt;your_deployer_private_key&gt;
-
-# Optional for universal-deploy
-CONTRACT_NAME=EncryptedPlayerRegistry
-CONSTRUCTOR_ARGS='[]'
-```
-
-> **Note:** never commit real private keys to Git. Use environment variables or a secure secret manager.
-
-### 3. Compile & deploy the contract
-
-```bash
-npx hardhat clean
-npx hardhat compile
-npx hardhat deploy --network sepolia
-```
-
-If you use the provided `universal-deploy.ts` script, it will pick up `CONTRACT_NAME` and `CONSTRUCTOR_ARGS` automatically.
-
-Make sure the deployed address matches the one used by the frontend (`CONTRACT_ADDRESS` constant in `index.html`).
+* Per-collection or per‑phase caps, using multiple encrypted limits.
+* Soft and hard caps (e.g. warning threshold vs absolute maximum).
+* Integration with actual ERC‑721 / ERC‑1155 contracts to block mints on-chain when the gate flag is `false`.
+* Time-based decay (e.g. daily or weekly encrypted quotas).
+* Exporting the `canStillMint` flag as an attestation or SBT for use by other dApps.
 
 ---
 
-## Running the frontend
+## 10. Built with Zama fhEVM
 
-Since the frontend is a static HTML SPA using WASM and `Cross-Origin-Opener-Policy`, you should serve it via a local HTTP server (not via `file://`).
+This project uses:
 
-From the project root:
+* **@fhevm/solidity** for encrypted types (`euint16`, `ebool`) and homomorphic operations.
+* **@zama-fhe/relayer-sdk** for encrypted input handling and public decryption.
 
-```bash
-cd frontend/public
+It is inspired by previous Zama builder projects that explored private leaderboards, ratings, limits, and gating logic, and adapts those patterns to the NFT minting world.
 
-# Simple option: use serve (no config needed)
-npx serve .
-
-# or, if you prefer http-server
-# npx http-server .
-```
-
-Then open the printed URL in your browser (e.g. [http://localhost:3000](http://localhost:3000) or [http://127.0.0.1:8080](http://127.0.0.1:8080)).
-
-Requirements:
-
-* Browser with EIP‑1193 wallet (MetaMask, Rabby…) connected to **Sepolia**.
-* Zama FHEVM RPC configured in your wallet / Hardhat.
+Feel free to fork, experiment, and integrate the **Mint Capacity Gate** into your own collections or quota-based systems.
 
 ---
 
-## How to use the dApp
+**License:** MIT (or another OSS license of your choice).
 
-1. **Connect wallet**
-
-   * Click **“Connect wallet”** in the header.
-   * Approve network switch to Sepolia if prompted.
-
-2. **Register as a player**
-
-   * In **“Player onboarding”** panel:
-
-     * Enter a public display name.
-     * Enter your age (0–255).
-     * Click **“Encrypt & register”**.
-   * Wait for the transaction to confirm.
-
-3. **Inspect your profile**
-
-   * In **“My profile”** panel, click **“Load my profile”**.
-   * You will see:
-
-     * Your name, and
-     * Your encrypted age handle (`bytes32`).
-
-4. **Decrypt your age**
-
-   * Click **“Private decrypt via Relayer”**.
-   * Sign the EIP‑712 message in your wallet.
-   * The decrypted age will appear as a pill in the UI, visible only in your browser.
-
-5. **Owner tools (optional)**
-
-   * If connected as `owner`:
-
-     * Use **“Make age public”** for a target address to enable public decryption.
-     * Use **“Clear profile”** to logically clear a user profile.
-
----
-
-
-
----
-
-## License
-
-MIT — feel free to fork, adapt and extend for your own Zama FHEVM demos.
+**Made for the Zama Developer Program · Powered by Fully Homomorphic Encryption**

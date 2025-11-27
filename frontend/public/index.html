@@ -2,341 +2,1026 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>ZAMA • FHEVM — Partner Tariff Gate</title>
+  <title>Mint Capacity Gate • Zama FHEVM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
+
+  <!-- Required for Relayer SDK (WASM/Workers) -->
   <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin" />
   <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
+
   <style>
-    :root{ --bg:#0b0f1a; --bg2:#090e18; --ink:#eaf1ff; --muted:#b6c4e3; --card:#0f1728; --br:#1a2540; --glow:rgba(56,189,248,.18); --accent:#2f66ff; --accent-2:#2553e6; --ok:#7ef29a; --bad:#ff8b8b; }
-    *{box-sizing:border-box} html,body{height:100%}
-    body{ margin:0; color:var(--ink);
-      background: radial-gradient(60% 40% at 50% -10%, #0f1a33 0%, transparent 70%), linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
-      font:15px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial;}
-    .wrap{max-width:1180px; margin:30px auto; padding:0 18px; display:grid; gap:18px; grid-template-columns: 1.1fr .9fr}
-    .spacer{flex:1} .pill{padding:6px 10px; border:1px solid var(--br); border-radius:10px; background:linear-gradient(to bottom, rgba(255,255,255,.03), transparent 30%), linear-gradient(150deg, #182033, #060a16); color:#cfe0ff; font-weight:800; white-space:nowrap}
-    .title{font-size:22px; font-weight:900}
-    .card{border:1px solid var(--br); border-radius:16px; background:radial-gradient(circle at top center, var(--glow) 0, rgba(15,23,42,.96) 36%, #020617 70%); box-shadow:0 1px 0 rgba(15,23,42,.9), 0 28px 60px rgba(0,0,0,.8), 0 0 36px var(--glow);}    
-    .card .hd{padding:14px 16px; border-bottom:1px solid var(--br); display:flex; align-items:center; gap:10px}
-    .card .bd{padding:14px 16px;}
-    .grid{display:grid; gap:12px} .grid.cols-2{grid-template-columns:1fr 1fr}
-    label{font-size:12px; color:#9db1e8; text-transform:uppercase; letter-spacing:.06em; font-weight:800; display:block; margin-bottom:6px}
-    input{width:100%; padding:12px; border-radius:12px; border:1px solid var(--br); background:#0b1220; color:var(--ink); font-weight:800; outline:none}
-    .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:10px 14px; border-radius:12px; border:1px solid rgba(31,41,55,.9); color:var(--ink); font-weight:900; cursor:pointer; background:linear-gradient(to bottom, rgba(255,255,255,.06), transparent 32%), linear-gradient(145deg, #1f2933, #020617); box-shadow:0 0 0 1px rgba(15,23,42,.9), 0 14px 30px rgba(0,0,0,.7), 0 0 26px var(--glow);}    
-    .btn:hover{transform:translateY(-1px); box-shadow:0 0 0 1px rgba(15,23,42,1), 0 18px 40px rgba(0,0,0,.85), 0 0 30px rgba(56,189,248,.35)}
-    .btn[disabled]{opacity:.55; cursor:not-allowed} .btn.primary{background:linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%); box-shadow:0 14px 40px rgba(47,102,255,.28), inset 0 0 0 1px rgba(255,255,255,.05)}
-    .kv{display:grid; grid-template-columns:140px 1fr; gap:8px; align-items:center}
-    .mono{font-family:ui-monospace, Menlo, Consolas, 'Courier New', monospace} .muted{color:var(--muted)} .ok{color:var(--ok)} .bad{color:var(--bad)}
-    .sep{height:1px; background:var(--br); margin:8px 0} .footer{grid-column:1/-1; text-align:center; color:#9db1e8; opacity:.85; padding:8px}
-    .row-actions{display:flex; gap:10px; flex-wrap:wrap}
-    .result-box{padding:10px 12px; border:1px solid var(--br); border-radius:12px; background:linear-gradient(to bottom, rgba(255,255,255,.03), transparent 32%), linear-gradient(145deg, #132035, #020617);}    
-    .tag{display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--br); background:#0b1424; color:#cfe0ff; font-size:12px; font-weight:800}
-    .row-split{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center} .small{font-size:12px}
+    :root {
+      --bg-outer: #f1ede7;
+      --bg-inner: #fdfaf5;
+      --ink: #171717;
+      --muted: #6b7280;
+      --accent: #ea580c;
+      --accent-soft: #fed7aa;
+      --accent-strong: #c2410c;
+      --border: #e5e7eb;
+      --danger: #b91c1c;
+      --danger-soft: #fee2e2;
+      --ok: #15803d;
+      --ok-soft: #bbf7d0;
+      --shadow-soft: 0 22px 50px rgba(15, 23, 42, 0.18);
+      --r-lg: 24px;
+      --r-md: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+    }
+
+    body {
+      background:
+        radial-gradient(circle at top left, #f97316 0, transparent 55%),
+        radial-gradient(circle at bottom right, #22c55e 0, transparent 55%),
+        var(--bg-outer);
+      display: flex;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 1200px;
+      background: var(--bg-inner);
+      border-radius: 32px;
+      padding: 18px 22px 20px;
+      box-shadow: var(--shadow-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* HEADER */
+
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .badge-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 16px;
+      background:
+        conic-gradient(from 210deg, #f97316, #fb923c, #22c55e, #f97316);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fefce8;
+      font-weight: 800;
+      font-size: 20px;
+    }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .title-main {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .title-sub {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .top-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #ffffffcc;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+    }
+
+    .mono {
+      font-family: ui-monospace, Menlo, Consolas, "SF Mono", monospace;
+    }
+
+    .btn {
+      border-radius: 999px;
+      padding: 8px 16px;
+      border: 1px solid var(--accent-strong);
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: #fefce8;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(234, 88, 12, 0.35);
+      transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+
+    .btn.secondary {
+      background: #ffffff;
+      color: var(--accent-strong);
+      border-color: #fed7aa;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+    }
+
+    .btn.small {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.25);
+    }
+
+    .btn[disabled] {
+      opacity: .6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* MAIN GRID */
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.1fr);
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .card {
+      border-radius: var(--r-lg);
+      background: #fffdf8;
+      border: 1px solid var(--border);
+      padding: 14px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .card-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .tag.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      border-color: #4ade80;
+    }
+
+    .tag.bad {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      color: #9ca3af;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .field-caption {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .field-shell {
+      border-radius: var(--r-md);
+      border: 1px solid #e4e4e7;
+      background: #fefce8;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="number"] {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 14px;
+      font-family: inherit;
+      width: 100%;
+      color: var(--ink);
+    }
+
+    input::placeholder {
+      color: #a1a1aa;
+    }
+
+    .unit {
+      font-size: 11px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+      margin: 4px 0 6px;
+    }
+
+    /* STATUS BUBBLES */
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: #d4d4d8;
+    }
+
+    .dot.ok {
+      background: var(--ok);
+    }
+
+    .dot.warn {
+      background: #facc15;
+    }
+
+    .dot.bad {
+      background: var(--danger);
+    }
+
+    /* LOG */
+
+    .log-card {
+      margin-top: 2px;
+      border-radius: var(--r-md);
+      border: 1px solid #11182711;
+      background: #020617;
+      padding: 8px 10px;
+      color: #e5e7eb;
+      font-size: 11px;
+      font-family: ui-monospace, Menlo, Consolas, "SF Mono";
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 960px) {
+      body {
+        padding: 10px;
+      }
+      .shell {
+        border-radius: 24px;
+        padding: 14px 12px;
+      }
+      .grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <section class="card">
-      <div class="hd">
-        <div class="title">Partner Tariff Gate</div>
-        <span class="pill">ZAMA · FHEVM</span>
-        <span class="spacer"></span>
-        <span class="pill" id="net-pill">Network: —</span>
-        <button class="btn" id="btn-connect">Connect</button>
+  <div class="shell">
+    <!-- HEADER -->
+    <header class="top">
+      <div class="badge-logo">M</div>
+      <div class="title-block">
+        <div class="title-main">Mint Capacity Gate</div>
+        <div class="title-sub">Encrypted per-wallet limits for your collection</div>
       </div>
-      <div class="bd grid">
-        <div class="card">
-          <div class="hd"><b>Eligibility · Encrypted user input</b></div>
-          <div class="bd grid">
-            <div class="result-box" id="decisionBox">Decision: <span class="tag">n/a</span></div>
+      <div class="top-right">
+        <div class="chip">
+          <span>Network</span>
+          <span id="netDisplay" class="mono">—</span>
+        </div>
+        <div class="chip">
+          <span>Contract</span>
+          <span id="contractDisplay" class="mono">—</span>
+        </div>
+        <button id="btnConnect" class="btn">Connect wallet</button>
+      </div>
+    </header>
 
-            <div class="grid cols-2">
-              <div><label>Plan ID</label><input id="planId" type="number" min="1" value="1" /></div>
-              <div></div>
-              <div><label>KYC level (u8)</label><input id="kyc" type="number" min="0" max="255" value="3" /></div>
-              <div><label>Tenure days (u16)</label><input id="tenure" type="number" min="0" max="65535" value="45" /></div>
-              <div><label>Trade volume (u32)</label><input id="volume" type="number" min="0" max="4294967295" value="1500" /></div>
-              <div style="display:flex;align-items:flex-end;justify-content:flex-end">
-                <button class="btn primary" id="btn-eval">Encrypt &amp; Evaluate</button>
-              </div>
+    <!-- MAIN GRID -->
+    <main class="grid">
+      <!-- USER SIDE -->
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Your minting capacity</div>
+            <div class="card-sub">
+              Run encrypted checks before you mint. The contract only sees ciphertexts.
             </div>
+          </div>
+          <span id="policyTag" class="tag">limit: unknown</span>
+        </div>
 
-            <div>
-              <label>Handle</label>
-              <div class="row-split">
-                <input id="handleOut" class="mono small" readonly placeholder="—" />
-                <button class="btn" id="btn-copy">Copy</button>
-              </div>
-            </div>
+        <div class="section-label">Step 1 · Plan your mint</div>
+        <div class="field-group">
+          <div class="field-label">How many tokens are you about to mint?</div>
+          <div class="field-shell">
+            <input id="deltaInput" type="number" min="1" max="65535" placeholder="e.g. 1" />
+            <span class="unit">amount</span>
+          </div>
+          <div class="field-caption">
+            This contract does not mint NFTs itself – it only tracks encrypted counts and
+            tells you whether you are still under the private limit.
+          </div>
+        </div>
 
-            <div class="row-actions">
-              <button class="btn" id="btn-make-public">Make my decision public</button>
-              <button class="btn" id="btn-public-decrypt">Decrypt (public)</button>
-              <button class="btn" id="btn-user-decrypt">Decrypt (signed)</button>
+        <div class="status-row">
+          <button id="btnRunCheck" class="btn secondary">Run encrypted check</button>
+          <button id="btnRefresh" class="btn small secondary">Sync decision</button>
+          <span id="userActionStatus" class="field-caption"></span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-label">Step 2 · Result</div>
+        <div class="status-row">
+          <div id="statusMint" class="status-pill">
+            <span id="statusDot" class="dot"></span>
+            <span id="statusText">No decision yet</span>
+          </div>
+        </div>
+        <div class="field-caption">
+          We reveal only a one-bit answer:
+          <strong>“still allowed to mint more”</strong> or <strong>“limit reached”</strong>.
+          Your cumulative mint count and the global limit stay encrypted.
+        </div>
+      </section>
+
+      <!-- ADMIN SIDE -->
+      <aside class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Admin lane · encrypted limit</div>
+            <div class="card-sub">
+              Owner-only: publish a global per-wallet mint cap as encrypted data.
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="hd"><b>Admin · Set encrypted policy</b> <span class="pill" id="isOwnerPill" style="margin-left:8px">owner: —</span></div>
-          <div class="bd grid cols-2">
-            <div><label>Plan ID</label><input id="p-plan" type="number" min="1" value="1" /></div>
-            <div><label>minKycLevel (u8)</label><input id="p-kyc" type="number" min="0" max="255" value="2" /></div>
-            <div><label>minTenureDays (u16)</label><input id="p-tenure" type="number" min="0" max="65535" value="30" /></div>
-            <div><label>minTradeVolumeUsd (u32)</label><input id="p-volume" type="number" min="0" max="4294967295" value="1000" /></div>
-            <div><label>minPassRules (u8)</label><input id="p-pass" type="number" min="1" max="3" value="2" /></div>
-            <div style="display:flex;align-items:flex-end"><button class="btn" id="btn-set-policy">Set encrypted policy</button></div>
+        <div class="section-label">Limit configuration</div>
+        <div class="field-group">
+          <div class="field-label">Max mints per wallet (uint16)</div>
+          <div class="field-shell">
+            <input id="maxMintsInput" type="number" min="1" max="65535" placeholder="e.g. 5" />
+            <span class="unit">tokens</span>
+          </div>
+          <div class="field-caption">
+            The clear value never lands on-chain. The Relayer encrypts it client-side,
+            and the contract only stores the ciphertext.
           </div>
         </div>
+
+        <div class="status-row">
+          <button id="btnSetPolicy" class="btn small secondary">Publish encrypted cap</button>
+          <span id="policyStatus" class="field-caption"></span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-label">Technical snapshot</div>
+        <div class="field-group">
+          <div class="field-caption">
+            <strong>Owner:</strong> <span id="ownerDisplay" class="mono">—</span>
+          </div>
+          <div class="field-caption">
+            <strong>You:</strong> <span id="accountDisplay" class="mono">not connected</span>
+          </div>
+          <div class="field-caption">
+            <strong>Relayer:</strong> <span id="relayerDisplay" class="mono">not ready</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- LOG -->
+    <section>
+      <div class="section-label">Event console</div>
+      <div id="log" class="log-card"></div>
+      <div class="footer-row">
+        <span>Mint Capacity Gate · Zama FHEVM demo · Sepolia</span>
+        <span class="mono">0x7D3a3ed2903d9e856f1Cd66Fd035C97ee41b3cC9</span>
       </div>
     </section>
-
-    <aside class="card">
-      <div class="hd"><b>Contract</b></div>
-      <div class="bd grid">
-        <div class="kv"><div class="muted">Address:</div><div class="mono" id="caddr">—</div></div>
-        <div class="kv"><div class="muted">Owner:</div><div class="mono" id="cowner">—</div></div>
-        <div class="kv"><div class="muted">Relayer:</div><div id="relayerState">not ready</div></div>
-        <div class="sep"></div>
-        <div class="kv"><div class="muted">Your account:</div><div class="mono" id="acc">—</div></div>
-        <div class="kv"><div class="muted">Eligibility handle:</div><div class="mono" id="lastHandle">—</div></div>
-      </div>
-    </aside>
-
-    <div class="footer">ZAMA FHEVM · Partner Tariff Gate — Single-file demo (Sepolia)</div>
   </div>
 
+  <!-- Ethers v6 + Relayer SDK -->
   <script type="module">
-    // ===== Net & endpoints =====
-    const CONTRACT_ADDRESS = '0x7F658EDaddFC0dfb8a68021dD8855d1B34a36CC3';
-    const CHAIN_ID_HEX = '0xaa36a7';
+    import {
+      BrowserProvider,
+      Contract
+    } from "https://cdn.jsdelivr.net/npm/ethers@6.15.0/dist/ethers.min.js";
 
-    // Try to use local reverse-proxy if available, else direct Zama endpoints
+    // ====== CONFIG ======
+    const CONTRACT_ADDRESS = "0x7D3a3ed2903d9e856f1Cd66Fd035C97ee41b3cC9";
+    const CHAIN_ID_HEX = "0xaa36a7"; // Sepolia
+
     const ORIGIN = window.location.origin;
-    const HAS_LOCAL_PROXY = ORIGIN.includes('localhost:3443') || ORIGIN.includes('127.0.0.1:3443');
-    const RELAYER_URL = HAS_LOCAL_PROXY ? `${ORIGIN}/relayer` : 'https://relayer.testnet.zama.org';
-    const GATEWAY_URL = HAS_LOCAL_PROXY ? `${ORIGIN}/gateway` : 'https://gateway.testnet.zama.org';
+    const IS_HTTPS = window.location.protocol === "https:";
+    const HAS_LOCAL_PROXY =
+      ORIGIN.includes("localhost:3443") || ORIGIN.includes("127.0.0.1:3443");
 
-    const $ = (q)=>document.querySelector(q);
-    const btnConnect=$('#btn-connect'), netPill=$('#net-pill'), isOwnerPill=$('#isOwnerPill');
-    const caddrEl=$('#caddr'), cownerEl=$('#cowner'), accEl=$('#acc'), relayerStateEl=$('#relayerState');
-    const planIdEl=$('#planId'), kycEl=$('#kyc'), tenureEl=$('#tenure'), volumeEl=$('#volume'), btnEval=$('#btn-eval');
-    const decisionBox=$('#decisionBox'), handleOut=$('#handleOut'), btnCopy=$('#btn-copy');
-    const btnMakePublic=$('#btn-make-public'), btnPublicDecrypt=$('#btn-public-decrypt'), btnUserDecrypt=$('#btn-user-decrypt');
-    const pPlanEl=$('#p-plan'), pKycEl=$('#p-kyc'), pTenureEl=$('#p-tenure'), pVolEl=$('#p-volume'), pPassEl=$('#p-pass'), btnSetPolicy=$('#btn-set-policy');
-    const lastHandleEl=$('#lastHandle');
+    const RELAYER_URL = HAS_LOCAL_PROXY
+      ? `${ORIGIN}/relayer`
+      : "https://relayer.testnet.zama.org";
+    const GATEWAY_URL = HAS_LOCAL_PROXY
+      ? `${ORIGIN}/gateway`
+      : "https://gateway.testnet.zama.org";
 
-    const [{ BrowserProvider, Contract }, relayerSdk] = await Promise.all([
-      import('https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm'),
-      import('https://cdn.zama.org/relayer-sdk-js/0.3.0-5/relayer-sdk-js.js')
-    ]);
-    const { initSDK, createInstance, SepoliaConfig, generateKeypair } = relayerSdk;
-    await initSDK();
+    const $ = (id) => document.getElementById(id);
 
-    const IS_HTTPS = location.protocol === 'https:';
-    if(!IS_HTTPS){ relayerStateEl.innerHTML = '<span class="bad">not https (signed decrypt disabled)</span>'; btnUserDecrypt.disabled = true; }
+    const btnConnect      = $("btnConnect");
+    const netDisplay      = $("netDisplay");
+    const contractDisplay = $("contractDisplay");
+    const accountDisplay  = $("accountDisplay");
+    const ownerDisplay    = $("ownerDisplay");
+    const relayerDisplay  = $("relayerDisplay");
+    const logEl           = $("log");
 
-    const ABI = [
-      { inputs:[], stateMutability:'view', type:'function', name:'owner', outputs:[{type:'address'}] },
-      { inputs:[{name:'planId',type:'uint256'}], stateMutability:'view', type:'function', name:'hasPolicy', outputs:[{type:'bool'}] },
-      { inputs:[{name:'planId',type:'uint256'},{name:'kycLevelExt',type:'bytes32'},{name:'tenureDaysExt',type:'bytes32'},{name:'volumeUsdExt',type:'bytes32'},{name:'proof',type:'bytes'}], name:'evaluateEligibilityEncrypted', outputs:[{type:'bytes32'}], stateMutability:'nonpayable', type:'function' },
-      { inputs:[{name:'planId',type:'uint256'},{name:'minKycLevelExt',type:'bytes32'},{name:'minTenureDaysExt',type:'bytes32'},{name:'minTradeVolumeUsdExt',type:'bytes32'},{name:'minPassRulesExt',type:'bytes32'},{name:'proof',type:'bytes'}], name:'setPolicyEncrypted', outputs:[], stateMutability:'nonpayable', type:'function' },
-      { inputs:[{name:'planId',type:'uint256'}], name:'getMyEligibilityHandle', outputs:[{type:'bytes32'}], stateMutability:'view', type:'function' },
-      { inputs:[{name:'planId',type:'uint256'}], name:'makeMyEligibilityPublic', outputs:[], stateMutability:'nonpayable', type:'function' }
-    ];
+    const deltaInput      = $("deltaInput");
+    const btnRunCheck     = $("btnRunCheck");
+    const btnRefresh      = $("btnRefresh");
+    const userActionStatus= $("userActionStatus");
+    const statusMint      = $("statusMint");
+    const statusDot       = $("statusDot");
+    const statusText      = $("statusText");
 
-    let provider=null, signer=null, contract=null, relayer=null;
-    let currentAccount=null, ownerAddr=null;
+    const maxMintsInput   = $("maxMintsInput");
+    const btnSetPolicy    = $("btnSetPolicy");
+    const policyStatus    = $("policyStatus");
+    const policyTag       = $("policyTag");
 
-    const tag=(t,ok)=>`<span class="tag ${ok?'ok':'bad'}">${t}</span>`;
-    const setDecision=(txt,ok=null)=>{
-      if(ok===true) decisionBox.innerHTML=`Decision: ${tag('ELIGIBLE',true)} <span class="muted small">(${txt})</span>`;
-      else if(ok===false) decisionBox.innerHTML=`Decision: ${tag('NOT ELIGIBLE',false)} <span class="muted small">(${txt})</span>`;
-      else decisionBox.innerHTML='Decision: <span class="tag">n/a</span>';
+    const contractDisplayShort = shortAddress(CONTRACT_ADDRESS);
+    contractDisplay.textContent = contractDisplayShort;
+
+    // ====== STATE ======
+    const state = {
+      provider: null,
+      signer: null,
+      contract: null,
+      relayer: null,
+      sdk: null,
+      account: null,
+      owner: null
     };
-    const short=(a)=>a?a.slice(0,6)+'…'+a.slice(-4):'—';
 
-    async function ensureSepolia(){
-      const id = await window.ethereum.request({ method:'eth_chainId' });
-      netPill.textContent = 'Network: ' + (id||'—');
-      if(id?.toLowerCase()!==CHAIN_ID_HEX){
-        try{ await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{ chainId: CHAIN_ID_HEX }] }); }catch(e){}
+    // ====== HELPERS ======
+    function appendLog(...parts) {
+      const msg = parts
+        .map((x) => (typeof x === "string" ? x : JSON.stringify(x)))
+        .join(" ");
+      logEl.textContent += msg + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log("[LOG]", ...parts);
+    }
+
+    function shortAddress(addr) {
+      if (!addr) return "—";
+      return addr.slice(0, 6) + "…" + addr.slice(-4);
+    }
+
+    function setPolicyTag(initialized) {
+      policyTag.textContent = initialized ? "limit: active" : "limit: not set";
+      policyTag.classList.remove("ok", "bad");
+      policyTag.classList.add(initialized ? "ok" : "bad");
+    }
+
+    function setStatusBadge(mode, text) {
+      statusDot.className = "dot";
+      if (mode === "ok") statusDot.classList.add("ok");
+      else if (mode === "warn") statusDot.classList.add("warn");
+      else if (mode === "bad") statusDot.classList.add("bad");
+      statusText.textContent = text;
+    }
+
+    function normalizeChainId(id) {
+      if (!id) return "";
+      const s = String(id);
+      if (/^0x[0-9a-fA-F]+$/.test(s)) return s.toLowerCase();
+      if (/^\d+$/.test(s)) return "0x" + BigInt(s).toString(16);
+      return s.toLowerCase();
+    }
+
+    async function ensureSepolia() {
+      if (!window.ethereum?.request) return false;
+      const current = normalizeChainId(
+        await window.ethereum.request({ method: "eth_chainId" }).catch(() => null)
+      );
+      netDisplay.textContent = current || "unknown";
+      if (current === CHAIN_ID_HEX) return true;
+
+      try {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: CHAIN_ID_HEX }]
+        });
+      } catch (e) {
+        if (e && e.code === 4902) {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: CHAIN_ID_HEX,
+                chainName: "Sepolia",
+                nativeCurrency: { name: "Sepolia ETH", symbol: "SEP", decimals: 18 },
+                rpcUrls: ["https://rpc.sepolia.org"],
+                blockExplorerUrls: ["https://sepolia.etherscan.io"]
+              }
+            ]
+          });
+        } else {
+          throw e;
+        }
       }
-      const now = await window.ethereum.request({ method:'eth_chainId' });
-      netPill.textContent = 'Network: ' + (now||'—');
+      const after = normalizeChainId(
+        await window.ethereum.request({ method: "eth_chainId" })
+      );
+      netDisplay.textContent = after || "unknown";
+      return after === CHAIN_ID_HEX;
     }
 
-    async function connect(){
-      if(!window.ethereum?.request){ alert('Install MetaMask'); return; }
-      await window.ethereum.request({ method:'eth_requestAccounts' });
-      await ensureSepolia();
-
-      provider = new BrowserProvider(window.ethereum);
-      signer = await provider.getSigner();
-      currentAccount = await signer.getAddress();
-      accEl.textContent = short(currentAccount);
-
-      contract = new Contract(CONTRACT_ADDRESS, ABI, signer);
-      caddrEl.textContent = CONTRACT_ADDRESS;
-
-      try{ ownerAddr = await contract.owner(); cownerEl.textContent = short(ownerAddr); }
-      catch{ ownerAddr = null; cownerEl.textContent = '—'; }
-      isOwnerPill.textContent = 'owner: ' + (ownerAddr && currentAccount && ownerAddr.toLowerCase()===currentAccount.toLowerCase() ? 'yes' : 'no');
-
-      relayer = await createInstance({ ...SepoliaConfig, relayerUrl: RELAYER_URL, gatewayUrl: GATEWAY_URL, network: window.ethereum, debug: true });
-      relayerStateEl.textContent = 'ready' + (IS_HTTPS ? '' : ' (limited)') + (HAS_LOCAL_PROXY ? ' (proxy)' : '');
-      btnConnect.textContent = 'Disconnect';
-    }
-
-    function disconnect(){
-      provider=signer=contract=relayer=null; currentAccount=null;
-      accEl.textContent='—'; btnConnect.textContent='Connect'; relayerStateEl.textContent='not ready';
-      setDecision(''); lastHandleEl.textContent='—'; handleOut.value='';
-    }
-
-    btnConnect.addEventListener('click', async()=>{ if(signer) disconnect(); else await connect(); });
-    btnCopy.addEventListener('click', async()=>{ if(!handleOut.value) return; await navigator.clipboard.writeText(handleOut.value); btnCopy.textContent='Copied'; setTimeout(()=>btnCopy.textContent='Copy',900); });
-
-    // ===== Helpers for decrypt =====
-    function normalizePublicDecryptResult(out, handleHex){
-      if(Array.isArray(out)){
-        const first = out[0];
-        return typeof first === 'string' ? first : (first?.value ?? null);
+    async function loadRelayerSdk() {
+      const urls = [
+        "https://cdn.zama.org/relayer-sdk-js/0.3.0-5/relayer-sdk-js.js",
+        "https://cdn.jsdelivr.net/npm/@zama-fhe/relayer-sdk@0.3.0/dist/relayer-sdk-js.js",
+        "https://unpkg.com/@zama-fhe/relayer-sdk@0.3.0/dist/relayer-sdk-js.js"
+      ];
+      let lastErr = null;
+      for (const url of urls) {
+        try {
+          appendLog("Loading Relayer SDK from", url);
+          const mod = await import(url);
+          appendLog("Relayer SDK loaded");
+          return mod;
+        } catch (e) {
+          console.warn("SDK load failed:", url, e);
+          lastErr = e;
+        }
       }
-      if(out && typeof out==='object'){
-        const k = handleHex?.toLowerCase?.();
-        const v = out[handleHex] ?? out[k];
-        return (typeof v==='object' && v!==null && 'value' in v) ? v.value : v;
+      throw lastErr || new Error("Relayer SDK failed to load");
+    }
+
+    // Normalise bytes32 handle to 0x-hex string
+    function normalizeHandle(h) {
+      if (!h) return null;
+      if (typeof h === "string") {
+        if (h.startsWith("0x")) return h.toLowerCase();
+        return ("0x" + h.replace(/^0x/, "")).toLowerCase();
+      }
+      if (typeof h === "object" && h !== null) {
+        if (typeof h.hex === "string") return h.hex.toLowerCase();
+        if (typeof h.data === "string") return h.data.toLowerCase();
+      }
+      if (ArrayBuffer.isView(h)) {
+        const bytes = new Uint8Array(h.buffer, h.byteOffset || 0, h.byteLength);
+        let hex = "0x";
+        for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+        return hex.toLowerCase();
+      }
+      return String(h).toLowerCase();
+    }
+
+    function boolFromAny(val) {
+      if (val === null || val === undefined) return null;
+      if (typeof val === "boolean") return val;
+      if (typeof val === "bigint") return val !== 0n;
+      if (typeof val === "number") return val !== 0;
+      if (typeof val === "string") {
+        const t = val.toLowerCase();
+        if (t === "true" || t === "1") return true;
+        if (t === "false" || t === "0") return false;
+        try { return BigInt(val) !== 0n; } catch { return null; }
+      }
+      if (Array.isArray(val) && val.length) return boolFromAny(val[0]);
+      if (typeof val === "object") {
+        const arr = Object.values(val);
+        if (arr.length) return boolFromAny(arr[0]);
       }
       return null;
     }
 
-    async function smartDecrypt(handleHex, mode='auto'){
-      if(!relayer || !contract) throw new Error('Connect wallet first');
-      const pair = { handle: String(handleHex), contractAddress: CONTRACT_ADDRESS };
+    async function publicDecryptBool(handleAny) {
+      if (!state.relayer) throw new Error("Relayer not ready");
+      const handleHex = normalizeHandle(handleAny);
+      if (!handleHex) throw new Error("Invalid handle");
 
-      // 1) public (pairs)
-      if(mode==='auto' || mode==='public'){
-        try{
-          const out = await relayer.publicDecrypt([pair]);
-          const v = normalizePublicDecryptResult(out, String(handleHex));
-          if(v!=null) return BigInt(v)===1n;
-        }catch(e){ if(mode==='public') throw e; }
+      appendLog("publicDecrypt handle:", handleHex);
+      const out = await state.relayer.publicDecrypt([handleHex]);
+      appendLog("publicDecrypt raw:", out);
 
-        // 2) public (handles only)
-        try{
-          const out2 = await relayer.publicDecrypt([String(handleHex)]);
-          const v2 = normalizePublicDecryptResult(out2, String(handleHex));
-          if(v2!=null) return BigInt(v2)===1n;
-        }catch(e){ if(mode==='public') throw e; }
+      let val = null;
+
+      if (out && typeof out === "object") {
+        const map = out.clearValues || out.values || null;
+        if (map && typeof map === "object") {
+          val =
+            map[handleHex] ??
+            map[handleHex.toLowerCase()] ??
+            map[handleHex.toUpperCase()];
+        }
+
+        if (val == null && typeof out.abiEncodedClearValues === "string") {
+          const hex = out.abiEncodedClearValues.replace(/^0x/, "");
+          if (hex.length >= 64) {
+            const word = "0x" + hex.slice(0, 64);
+            try { val = BigInt(word); } catch { /* ignore */ }
+          }
+        }
       }
 
-      // 3) signed userDecrypt
-      if(mode!=='public'){
-        if(!IS_HTTPS) throw new Error('Open over HTTPS to use signed decrypt');
-        const kp = await generateKeypair();
-        const startTs = Math.floor(Date.now()/1000).toString();
-        const daysValid = '7';
-        const eip = relayer.createEIP712(kp.publicKey, [CONTRACT_ADDRESS], startTs, daysValid);
-        const sig = await signer.signTypedData(eip.domain, { UserDecryptRequestVerification: eip.types.UserDecryptRequestVerification }, eip.message);
-        const out = await relayer.userDecrypt(
-          [pair],
-          kp.privateKey, kp.publicKey, sig.replace('0x',''),
-          [CONTRACT_ADDRESS], await signer.getAddress(), startTs, daysValid
-        );
-        const picked = out[String(handleHex)] ?? out[String(handleHex).toLowerCase()];
-        if(picked==null) throw new Error('userDecrypt returned empty');
-        return BigInt(picked)===1n;
-      }
-
-      throw new Error('Decrypt failed');
+      const b = boolFromAny(val);
+      if (b === null) throw new Error("publicDecrypt returned empty");
+      return b;
     }
 
-    // === Encrypt & Evaluate (NO auto-decrypt earlier; now we auto-try) ===
-    btnEval.addEventListener('click', async()=>{
-      try{
-        if(!signer || !contract || !relayer) throw new Error('Connect wallet first');
-        const planId = BigInt(planIdEl.value||'0');
-        const kyc = Number(kycEl.value||'0')|0;
-        const tenure = Number(tenureEl.value||'0')|0;
-        const volume = Number(volumeEl.value||'0')|0;
-        if(planId<=0n) throw new Error('Bad planId');
+    // ===== ABI =====
+    const ABI = [
+      {
+        type: "function",
+        name: "owner",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "address" }]
+      },
+      {
+        type: "function",
+        name: "transferOwnership",
+        stateMutability: "nonpayable",
+        inputs: [{ type: "address", name: "newOwner" }],
+        outputs: []
+      },
+      {
+        type: "function",
+        name: "policyInitialized",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "bool" }]
+      },
+      {
+        type: "function",
+        name: "setMintPolicy",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "bytes32", name: "_maxMintsPerWallet" },
+          { type: "bytes",   name: "proof" }
+        ],
+        outputs: []
+      },
+      {
+        type: "function",
+        name: "updateMintCounter",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "bytes32", name: "encDelta" },
+          { type: "bytes",   name: "proof" }
+        ],
+        outputs: []
+      },
+      {
+        type: "function",
+        name: "getMyMintHandles",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [
+          { type: "bytes32" },
+          { type: "bytes32" },
+          { type: "bool" }
+        ]
+      },
+      {
+        type: "function",
+        name: "getCanMintHandleOf",
+        stateMutability: "view",
+        inputs: [{ type: "address", name: "who" }],
+        outputs: [
+          { type: "bytes32" },
+          { type: "bool" }
+        ]
+      },
+      {
+        type: "function",
+        name: "getMintedHandleOf",
+        stateMutability: "view",
+        inputs: [{ type: "address", name: "who" }],
+        outputs: [
+          { type: "bytes32" },
+          { type: "bool" }
+        ]
+      }
+    ];
 
-        setDecision('encrypting …');
-        const enc = relayer.createEncryptedInput(CONTRACT_ADDRESS, currentAccount);
-        enc.add8(kyc); enc.add16(tenure); enc.add32(volume);
-        const { handles, inputProof } = await enc.encrypt();
+    // ===== CONNECT / DISCONNECT =====
+    btnConnect.addEventListener("click", async () => {
+      if (state.signer) await disconnectWallet();
+      else await connectWallet();
+    });
 
-        const tx = await contract.evaluateEligibilityEncrypted(planId, handles[0], handles[1], handles[2], inputProof);
+    async function connectWallet() {
+      try {
+        if (!window.ethereum?.request) {
+          alert("Please install MetaMask or another EIP-1193 wallet.");
+          return;
+        }
+
+        await ensureSepolia();
+
+        const provider = new BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        const signer = await provider.getSigner();
+        const account = await signer.getAddress();
+        const contract = new Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        const sdk = await loadRelayerSdk();
+        if (sdk.initSDK) await sdk.initSDK();
+        const { createInstance, SepoliaConfig } = sdk;
+        const relayer = await createInstance({
+          ...SepoliaConfig,
+          relayerUrl: RELAYER_URL,
+          gatewayUrl: GATEWAY_URL,
+          network: window.ethereum,
+          debug: true
+        });
+
+        state.provider = provider;
+        state.signer   = signer;
+        state.contract = contract;
+        state.sdk      = sdk;
+        state.relayer  = relayer;
+        state.account  = account;
+
+        btnConnect.textContent = "Disconnect";
+        btnConnect.classList.remove("primary");
+        accountDisplay.textContent = shortAddress(account);
+        relayerDisplay.textContent =
+          "ready " + (HAS_LOCAL_PROXY ? "(via proxy)" : "(Sepolia)");
+
+        try {
+          state.owner = await contract.owner();
+          ownerDisplay.textContent =
+            shortAddress(state.owner) +
+            (state.owner.toLowerCase() === account.toLowerCase() ? " · admin" : "");
+        } catch {
+          ownerDisplay.textContent = "—";
+        }
+
+        try {
+          const init = await contract.policyInitialized();
+          setPolicyTag(init);
+        } catch {
+          setPolicyTag(false);
+        }
+
+        appendLog("Connected:", account);
+        await refreshMyState();
+      } catch (e) {
+        console.error(e);
+        const msg = e?.reason || e?.shortMessage || e?.message || String(e);
+        appendLog("Connect failed:", msg);
+        alert(msg);
+      }
+    }
+
+    async function disconnectWallet() {
+      state.provider = null;
+      state.signer   = null;
+      state.contract = null;
+      state.sdk      = null;
+      state.relayer  = null;
+      state.account  = null;
+      state.owner    = null;
+
+      btnConnect.textContent = "Connect wallet";
+      btnConnect.classList.add("primary");
+      accountDisplay.textContent = "not connected";
+      ownerDisplay.textContent   = "—";
+      relayerDisplay.textContent = "not ready";
+
+      setPolicyTag(false);
+      setStatusBadge("warn", "No decision yet");
+      userActionStatus.textContent = "";
+      policyStatus.textContent = "";
+
+      appendLog("Disconnected");
+    }
+
+    // ===== REFRESH USER STATE =====
+    btnRefresh.addEventListener("click", async () => {
+      try {
+        await refreshMyState();
+      } catch (e) {
+        console.error(e);
+        const msg = e?.message || String(e);
+        appendLog("Refresh error:", msg);
+        alert(msg);
+      }
+    });
+
+    async function refreshMyState() {
+      if (!state.contract || !state.relayer || !state.signer) return;
+      const me = state.account || (await state.signer.getAddress());
+      const [mintedHandle, canMintHandle, initialized] =
+        await state.contract.getMyMintHandles();
+
+      if (!initialized) {
+        setStatusBadge("warn", "No activity yet");
+        return;
+      }
+
+      appendLog("Eligibility handle:", canMintHandle);
+      const canMint = await publicDecryptBool(canMintHandle);
+      if (canMint) {
+        setStatusBadge("ok", "You are still under the private cap");
+      } else {
+        setStatusBadge("bad", "Limit appears to be reached");
+      }
+      appendLog("Decrypted canMint:", canMint);
+    }
+
+    // ===== USER ACTION: RUN ENCRYPTED CHECK =====
+    btnRunCheck.addEventListener("click", async () => {
+      try {
+        if (!state.contract || !state.relayer || !state.signer) {
+          throw new Error("Connect your wallet first.");
+        }
+
+        const raw = (deltaInput.value || "").trim();
+        const delta = Number(raw);
+        if (!Number.isInteger(delta) || delta <= 0 || delta > 65535) {
+          throw new Error("Delta must be an integer between 1 and 65535.");
+        }
+
+        userActionStatus.textContent = "Encrypting delta and updating counter…";
+
+        const sender = state.account || (await state.signer.getAddress());
+        const buf = state.relayer.createEncryptedInput(CONTRACT_ADDRESS, sender);
+        buf.add16(delta);
+        const { handles, inputProof } = await buf.encrypt();
+        appendLog("Encrypted delta handle:", handles[0]);
+
+        const tx = await state.contract.updateMintCounter(handles[0], inputProof);
+        appendLog("updateMintCounter tx:", tx.hash);
+        userActionStatus.textContent = "Transaction sent: " + tx.hash.slice(0, 10) + "…";
+
         await tx.wait();
+        appendLog("updateMintCounter confirmed");
+        userActionStatus.textContent = "Encrypted check stored on-chain ✔";
 
-        const h = await contract.getMyEligibilityHandle(planId);
-        handleOut.value = h; lastHandleEl.textContent = h;
-
-        // AUTO decrypt cascade right after evaluation
-        try{
-          const ok = await smartDecrypt(h, 'auto');
-          setDecision('auto decrypt', ok);
-        }catch(e){ setDecision('stored handle — use buttons to decrypt'); }
-      }catch(e){ console.error(e); alert(e?.message||'Failed'); setDecision('error'); }
+        await refreshMyState();
+      } catch (e) {
+        console.error(e);
+        const msg = e?.reason || e?.shortMessage || e?.message || String(e);
+        userActionStatus.textContent = msg;
+        appendLog("updateMintCounter error:", msg);
+        alert(msg);
+      }
     });
 
-    // Make public (on-chain)
-    btnMakePublic.addEventListener('click', async()=>{
-      try{
-        if(!signer || !contract) throw new Error('Connect wallet first');
-        const planId = BigInt(planIdEl.value||'0');
-        const tx = await contract.makeMyEligibilityPublic(planId);
-        await tx.wait();
-        const h = await contract.getMyEligibilityHandle(planId);
-        handleOut.value = h; lastHandleEl.textContent = h;
-        setDecision('made public — now try Decrypt (public)');
-      }catch(e){ console.error(e); alert(e?.message||'Failed'); }
-    });
+    // ===== ADMIN: SET MINT POLICY =====
+    btnSetPolicy.addEventListener("click", async () => {
+      try {
+        if (!state.contract || !state.relayer || !state.signer) {
+          throw new Error("Connect your wallet first.");
+        }
+        if (!state.owner) {
+          throw new Error("Owner not known. Reconnect wallet.");
+        }
 
-    // === Replaced handlers: use smartDecrypt ===
-    btnPublicDecrypt.addEventListener('click', async()=>{
-      try{
-        const planId = BigInt(planIdEl.value||'0');
-        const h = handleOut.value || await contract.getMyEligibilityHandle(planId);
-        if(!h || String(h)==='0x'+'0'.repeat(64)) throw new Error('No decision handle. Evaluate first.');
-        const ok = await smartDecrypt(String(h), 'public');
-        setDecision('public decrypt', ok);
-      }catch(e){ console.error('public decrypt failed:', e); alert(e?.message||'Public decrypt failed'); setDecision('error'); }
-    });
+        const me = state.account || (await state.signer.getAddress());
+        if (state.owner.toLowerCase() !== me.toLowerCase()) {
+          throw new Error("Only the contract owner can update the cap.");
+        }
 
-    btnUserDecrypt.addEventListener('click', async()=>{
-      try{
-        const planId = BigInt(planIdEl.value||'0');
-        const h = handleOut.value || await contract.getMyEligibilityHandle(planId);
-        if(!h || String(h)==='0x'+'0'.repeat(64)) throw new Error('No decision handle');
-        const ok = await smartDecrypt(String(h), 'signed');
-        setDecision('signed decrypt', ok);
-      }catch(e){ console.error(e); alert(e?.message||'Failed'); }
-    });
+        const raw = (maxMintsInput.value || "").trim();
+        const maxMints = Number(raw);
+        if (!Number.isInteger(maxMints) || maxMints <= 0 || maxMints > 65535) {
+          throw new Error("Max mints must be an integer between 1 and 65535.");
+        }
 
-    // === Admin: set encrypted policy ===
-    btnSetPolicy.addEventListener('click', async()=>{
-      try{
-        if(!signer || !contract || !relayer) throw new Error('Connect wallet first');
-        if(!ownerAddr || ownerAddr.toLowerCase()!== (await signer.getAddress()).toLowerCase()) throw new Error('Owner only');
-        const planId = BigInt(pPlanEl.value||'0');
-        const a=Number(pKycEl.value||'0')|0, b=Number(pTenureEl.value||'0')|0, c=Number(pVolEl.value||'0')|0, d=Number(pPassEl.value||'0')|0;
-        if(planId<=0n) throw new Error('Bad planId');
+        policyStatus.textContent = "Encrypting limit and sending transaction…";
+        appendLog("Encrypting policy maxMints:", maxMints);
 
-        const buf = relayer.createEncryptedInput(CONTRACT_ADDRESS, await signer.getAddress());
-        buf.add8(a); buf.add16(b); buf.add32(c); buf.add8(d);
+        const buf = state.relayer.createEncryptedInput(CONTRACT_ADDRESS, me);
+        buf.add16(maxMints);
         const { handles, inputProof } = await buf.encrypt();
 
-        const tx = await contract.setPolicyEncrypted(planId, handles[0], handles[1], handles[2], handles[3], inputProof);
-        await tx.wait(); alert('Policy set ✓');
-      }catch(e){ console.error(e); alert(e?.message||'Failed'); }
+        const tx = await state.contract.setMintPolicy(handles[0], inputProof);
+        appendLog("setMintPolicy tx:", tx.hash);
+        policyStatus.textContent = "Tx sent: " + tx.hash.slice(0, 10) + "…";
+
+        await tx.wait();
+        appendLog("setMintPolicy confirmed");
+        policyStatus.textContent = "Encrypted cap active ✔";
+        setPolicyTag(true);
+      } catch (e) {
+        console.error(e);
+        const msg = e?.reason || e?.shortMessage || e?.message || String(e);
+        policyStatus.textContent = msg;
+        appendLog("setMintPolicy error:", msg);
+        alert(msg);
+      }
     });
 
-    if(window.ethereum){
-      window.ethereum.on?.('accountsChanged', ()=>location.reload());
-      window.ethereum.on?.('chainChanged', ()=>location.reload());
-      try{ const a = await window.ethereum.request({ method:'eth_accounts' }); if(a && a.length) await connect(); }catch{}
+    // ===== AUTO CONNECT IF ALREADY AUTHORIZED =====
+    if (window.ethereum) {
+      window.ethereum.on?.("accountsChanged", () => window.location.reload());
+      window.ethereum.on?.("chainChanged", () => window.location.reload());
+
+      (async () => {
+        try {
+          const accounts = await window.ethereum.request({ method: "eth_accounts" });
+          if (accounts && accounts.length) {
+            appendLog("Wallet already authorized, auto-connecting…");
+            await connectWallet();
+          }
+        } catch (e) {
+          console.warn("Auto-connect failed:", e);
+        }
+      })();
     }
   </script>
 </body>
